@@ -55,12 +55,12 @@ class Trace(object):
         return stack
 
     def __unicode__(self):
-        value = []
+        output = []
         for info, indent in self.stack:
             lines = unicode(info).splitlines()
             for line in lines:
-                value.append('  ' * indent + line)
-        return '\n'.join(value)
+                output.append('  ' * indent + line)
+        return '\n'.join(output)
 
 
 def is_own_frame(frame):
