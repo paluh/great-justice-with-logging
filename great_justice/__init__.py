@@ -7,7 +7,6 @@ A more useful alternative to regular stack traces.
 '''
 
 import contextlib
-import inspect
 import pprint
 import sys
 import time
@@ -18,36 +17,19 @@ from . import utils
 
 __all__ = ['what_happen', 'take_your_time', 'we_get_signal']
 
-def _is_own_frame(frame):
-    '''
-    Returns True if given frame points to us
-    '''
-    filename = inspect.getsourcefile(frame)
-    # skip self
-    filename_base = filename.rsplit('.', 1)[0]
-    local_base = __file__.rsplit('.', 1)[0]
-    if filename_base == local_base:
-        return True
-    return False
-
-
 def what_happen(logger=None):
     '''
     Print information about the current stack trace
     '''
-    utils.log(logger, structure.WhatHappen())
-    exc_type, exc_value, trace = sys.exc_info()
-    while trace:
-        frame = trace.tb_frame
-        trace = trace.tb_next
-        # skip self
-        if not _is_own_frame(frame):
-            utils.log_frame(logger, frame)
-    utils.log(
-        logger,
-        structure.ExceptionValue(
-            ''.join(traceback.format_exception_only(exc_type,
-                                                    exc_value)).strip()))
+    trace = utils.Trace(sys.exc_info())
+    if not logger:
+        for info, indent in trace.stack:
+            lines = info.prettyformat().splitlines()
+            for line in lines:
+                print '  ' * indent + line
+            #pprint.pprint(unicode(trace))
+    else:
+        logger.log(unicode(trace))
 
 @contextlib.contextmanager
 def take_your_time(logger=None):
@@ -88,7 +70,7 @@ class Signal(object):
         Processes the event and displays it accordingly
         '''
         if event == 'call':
-            if _is_own_frame(frame):
+            if utils.is_own_frame(frame):
                 return
             utils.log_invocation(self.logger, frame, indent=self._indent)
             self._indent += 1
@@ -110,3 +92,4 @@ class Signal(object):
 
 
 we_get_signal = Signal
+
