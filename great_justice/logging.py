@@ -2,7 +2,7 @@ from __future__ import absolute_import
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.utils import formatdate
-from logging import Formatter
+from logging import _defaultFormatter, Formatter
 from logging.handlers import SMTPHandler
 import smtplib
 import sys
@@ -13,29 +13,17 @@ from . import utils
 
 class Formatter(Formatter):
 
-    class Message(unicode):
-
-        def __new__(cls, header, trace=None):
-            if header[-1:] != '\n':
-                header = header + '\n'
-            msg = header + unicode(trace)
-            obj = unicode.__new__(cls, msg)
-            obj.header = header
-            obj.trace = trace
-            return obj
-
-    trace = None
-
     def format(self, record):
         record.message = record.getMessage()
         if self.usesTime():
             record.asctime = self.formatTime(record, self.datefmt)
         s = self._fmt % record.__dict__
         if record.exc_info:
-            self.trace = utils.Trace(record.exc_info)
-            record.exc_text = unicode(self.trace)
+            record.exc_text = unicode(utils.Trace(record.exc_info))
         if record.exc_text:
-            return Formatter.Message(s, self.trace)
+            if s[-1:] != '\n':
+                s = s + '\n'
+            s =  s +  record.exc_text
         return s
 
 
@@ -44,11 +32,6 @@ class SMTPHandler(SMTPHandler):
     def __init__(self, *args, **kwargs):
         super(SMTPHandler, self).__init__(*args, **kwargs)
         self.formatter = Formatter()
-
-    def setFormatter(self, formatter):
-        if not isinstance(formatter, Formatter):
-            raise ValueError('Formatter has to be great_justice.logging.Formatter instance')
-        super(SMTPHandler, self).setFormatter(formatter)
 
     def emit(self, record):
         try:
@@ -60,10 +43,11 @@ class SMTPHandler(SMTPHandler):
 
             text = self.format(record)
             msg.attach(MIMEText(text.encode(sys.getfilesystemencoding()), 'plain'))
-            if isinstance(text, Formatter.Message) and text.trace:
-                header = '<p style="white-space: pre-wrap; word-wrap: break-word;">%s</p>' % text.header
-                trace_html = self._trace_html(text.trace)
-                html = ('<html><head></head><body>%s<div style="font-size:120%%">%s</div></body></html>')% (header, trace_html)
+            if record.exc_info:
+                info = (self.formatter or _defaultFormatter)._fmt % record.__dict__
+                info = '<p style="white-space: pre-wrap; word-wrap: break-word;">%s</p>' % info
+                trace_html = self._trace_html(utils.Trace(record.exc_info))
+                html = ('<html><head></head><body>%s<div style="font-size:120%%">%s</div></body></html>')% (info, trace_html)
                 msg.attach(MIMEText(html.encode(sys.getfilesystemencoding()), 'html'))
             port = self.mailport
             if not port:
