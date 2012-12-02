@@ -24,6 +24,9 @@ class Formatter(Formatter):
 
 class HtmlFormatter(Formatter):
 
+    header_container_style = 'white-space: pre-wrap; word-wrap: break-word;'
+    trace_container_style = ('color:#fff;background:#000;font-size:14px;'
+                             'font-family:monospace;white-space:pre;padding:10px')
     styles = {
         structure.WhatHappen: 'color:red',
         structure.VariableName: 'color:yellow',
@@ -43,7 +46,7 @@ class HtmlFormatter(Formatter):
         s = self._fmt % record.__dict__
         if record.exc_info:
             if html:
-                s = '<p style="white-space: pre-wrap; word-wrap: break-word;">%s</p>' % s
+                s = '<p style="%s">%s</p>' % (self.header_container_style, s)
                 exc_html = self.formatException(record.exc_info, html)
                 s = s + exc_html
             else:
@@ -67,7 +70,7 @@ class HtmlFormatter(Formatter):
                              .replace('<', '&lt;')
                              .replace("'", '&#39;')
                              .replace('"', '&#34;'))
-        output = ['<div style="color:#fff;background:#000;font-size:12px;font-family:monospace;white-space:pre;padding:10px">']
+        output = ['<div style="%s">' % self.trace_container_style]
         def prettyformat(struct, indent):
             o = []
             def _prettyformat(struct):
