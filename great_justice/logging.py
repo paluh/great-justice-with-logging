@@ -2,10 +2,12 @@ from __future__ import absolute_import
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.utils import formatdate
-from logging import _defaultFormatter, Formatter
+from logging import _defaultFormatter, Formatter, StreamHandler
 from logging.handlers import SMTPHandler
+import os
 import smtplib
 import sys
+from termcolor import colored
 
 from . import structure
 from . import utils
@@ -13,21 +15,26 @@ from . import utils
 
 class Formatter(Formatter):
 
-    def format(self, record):
-        record.message = record.getMessage()
-        if self.usesTime():
-            record.asctime = self.formatTime(record, self.datefmt)
-        s = self._fmt % record.__dict__
-        if record.exc_info:
-            record.exc_text = unicode(utils.Trace(record.exc_info))
-        if record.exc_text:
-            if s[-1:] != '\n':
-                s = s + '\n'
-            s =  s +  record.exc_text
+    def formatException(self, ei):
+        s = unicode(utils.Trace(ei))
+        if s[-1:] == "\n":
+            s = s[:-1]
         return s
 
 
 class SMTPHandler(SMTPHandler):
+
+    styles = {
+        structure.WhatHappen: 'color:red',
+        structure.VariableName: 'color:yellow',
+        structure.Value: 'color:green',
+        structure.UndefinedValue: 'color:red',
+        structure.CurrentLine: 'font-weight:bold;color:white',
+        structure.CodeLine: 'font-weight:grey',
+        structure.CodeScope: 'font-weight:bold',
+        structure.CodeLineNo: 'font-weight:bold',
+        structure.ExceptionValue: 'font-weight:bold;color:red',
+    }
 
     def __init__(self, *args, **kwargs):
         super(SMTPHandler, self).__init__(*args, **kwargs)
@@ -67,17 +74,6 @@ class SMTPHandler(SMTPHandler):
             self.handleError(record)
 
     def _trace_html(self, trace):
-        styles = {
-            structure.WhatHappen: 'color:red',
-            structure.VariableName: 'color:yellow',
-            structure.Value: 'color:green',
-            structure.UndefinedValue: 'color:red',
-            structure.CurrentLine: 'font-weight:bold;color:white',
-            structure.CodeLine: 'font-weight:grey',
-            structure.CodeScope: 'font-weight:bold',
-            structure.CodeLineNo: 'font-weight:bold',
-            structure.ExceptionValue: 'font-weight:bold;color:red',
-        }
         escape = lambda s: (s.replace('&', '&amp;')
                              .replace('>', '&gt;')
                              .replace('<', '&lt;')
@@ -87,14 +83,14 @@ class SMTPHandler(SMTPHandler):
         def prettyformat(struct, indent):
             o = []
             def _prettyformat(struct):
-                if struct.__class__ in styles:
-                    o.append(u'<span style="%s">'% styles[struct.__class__])
+                if type(struct) in self.styles:
+                    o.append(u'<span style="%s">'% self.styles[struct.__class__])
                 for arg in struct.args:
                     if isinstance(arg, structure.Structure):
                         _prettyformat(arg)
                     else:
                         o.append(escape(unicode(arg)))
-                if struct.__class__ in styles:
+                if type(struct) in self.styles:
                     o.append(u'</span>')
             _prettyformat(struct)
             i = u'  '*indent
@@ -104,3 +100,63 @@ class SMTPHandler(SMTPHandler):
         output.append('</div>')
         return '\n'.join(output)
 
+
+class TermFormatter(Formatter):
+
+    styles = {
+        structure.WhatHappen: {'color': 'red'},
+        structure.VariableName: {'color': 'yellow'},
+        structure.Value: {'color': 'green'},
+        structure.UndefinedValue: {'color': 'red'},
+        structure.CurrentLine: {'color': 'white', 'attrs': ['bold']},
+        structure.CodeLine: {'color': 'blue'},
+        structure.CodeScope: {'attrs': ['bold']},
+        structure.CodeLineNo: {'attrs': ['bold']},
+        structure.ExceptionValue: {'color': 'red', 'attrs': ['reverse']}
+    }
+
+    def formatException(self, ei, isatty=False):
+        if not isatty:
+            return super(TermFormatter, self).formatException(ei)
+        trace = utils.Trace(ei)
+        def prettyformat(struct, indent):
+            def _prettyformat(struct):
+                attrs = self.styles.get(type(struct), {})
+                return colored(
+                    u''.join(_prettyformat(arg)
+                    if isinstance(arg, structure.Structure) else unicode(arg)
+                    for arg in struct.args), **attrs)
+            i = u'  '*indent
+            return u'\n'.join([i+l for l in ''.join(_prettyformat(struct)).splitlines()])
+        return '\n'.join(prettyformat(info, indent) for info, indent in trace.stack)
+
+    def format(self, record, isatty=False):
+        record.message = record.getMessage()
+        if self.usesTime():
+            record.asctime = self.formatTime(record, self.datefmt)
+        s = self._fmt % record.__dict__
+        if record.exc_info:
+            exc_text = self.formatException(record.exc_info, isatty)
+            if s[-1:] != "\n":
+                s = s + "\n"
+            try:
+                s = s + exc_text
+            except UnicodeError:
+                s = s + exc_text.decode(sys.getfilesystemencoding(), 'replace')
+        return s
+
+
+class StreamHandler(StreamHandler):
+
+    def __init__(self, *args, **kwargs):
+        super(StreamHandler, self).__init__(*args, **kwargs)
+        self.formatter = self.formatter or TermFormatter()
+
+    def format(self, record):
+        if self.formatter and isinstance(self.formatter, TermFormatter):
+            return self.formatter.format(record, os.isatty(self.stream.fileno()))
+        if self.formatter:
+            fmt = self.formatter
+        else:
+            fmt = _defaultFormatter
+        return fmt.format(record)
