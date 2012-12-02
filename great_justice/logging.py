@@ -84,7 +84,7 @@ class SMTPHandler(SMTPHandler):
             o = []
             def _prettyformat(struct):
                 if type(struct) in self.styles:
-                    o.append(u'<span style="%s">'% self.styles[struct.__class__])
+                    o.append(u'<span style="%s">'% self.styles[type(struct)])
                 for arg in struct.args:
                     if isinstance(arg, structure.Structure):
                         _prettyformat(arg)
