@@ -1,8 +1,9 @@
 from __future__ import absolute_import
+import argparse
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.utils import formatdate
-from logging import _defaultFormatter, Formatter, StreamHandler
+from logging import Formatter, getLogger, StreamHandler
 from logging.handlers import SMTPHandler
 import os
 import smtplib
@@ -39,31 +40,18 @@ class HtmlFormatter(Formatter):
         structure.ExceptionValue: 'font-weight:bold;color:red',
     }
 
-    def format(self, record, html=False):
+    def format(self, record):
         record.message = record.getMessage()
         if self.usesTime():
             record.asctime = self.formatTime(record, self.datefmt)
         s = self._fmt % record.__dict__
         if record.exc_info:
-            if html:
-                s = '<p style="%s">%s</p>' % (self.header_container_style, s)
-                exc_html = self.formatException(record.exc_info, html)
-                s = s + exc_html
-            else:
-                if not record.exc_text:
-                    record.exc_text = self.formatException(record.exc_info)
-                if s[-1:] != "\n":
-                    s = s + "\n"
-                try:
-                    s = s + record.exc_text
-                except UnicodeError:
-                    s = s + record.exc_text.decode(sys.getfilesystemencoding(),
-                                                   'replace')
+            s = '<p style="%s">%s</p>' % (self.header_container_style, s)
+            exc_html = self.formatException(record.exc_info)
+            s = s + exc_html
         return s
 
-    def formatException(self, ei, html=False):
-        if not html:
-            return super(HtmlFormatter, self).formatException(ei)
+    def formatException(self, ei):
         trace = utils.Trace(ei)
         escape = lambda s: (s.replace('&', '&amp;')
                              .replace('>', '&gt;')
@@ -95,8 +83,10 @@ class HtmlFormatter(Formatter):
 class SMTPHandler(SMTPHandler):
 
     def __init__(self, *args, **kwargs):
+        formatter = kwargs.pop('formatter', Formatter())
+        self.html_formatter = kwargs.pop('html_formatter', HtmlFormatter())
         super(SMTPHandler, self).__init__(*args, **kwargs)
-        self.formatter = self.formatter or HtmlFormatter()
+        self.formatter = formatter
 
     def emit(self, record):
         try:
@@ -108,8 +98,8 @@ class SMTPHandler(SMTPHandler):
 
             text = self.format(record)
             msg.attach(MIMEText(text.encode(sys.getfilesystemencoding()), 'plain'))
-            if record.exc_info:
-                html = self.format(record, html=True)
+            if record.exc_info and self.html_formatter:
+                html =  self.html_formatter.format(record)
                 html = '<html><head></head><body>%s</body></html>' % html
                 msg.attach(MIMEText(html.encode(sys.getfilesystemencoding()), 'html'))
             port = self.mailport
@@ -129,15 +119,6 @@ class SMTPHandler(SMTPHandler):
         except:
             self.handleError(record)
 
-    def format(self, record, html=False):
-        if self.formatter and isinstance(self.formatter, HtmlFormatter):
-            return self.formatter.format(record, html)
-        if self.formatter:
-            fmt = self.formatter
-        else:
-            fmt = _defaultFormatter
-        return fmt.format(record)
-
 
 class TermFormatter(Formatter):
 
@@ -153,9 +134,7 @@ class TermFormatter(Formatter):
         structure.ExceptionValue: {'color': 'red', 'attrs': ['reverse']}
     }
 
-    def formatException(self, ei, isatty=False):
-        if not isatty:
-            return super(TermFormatter, self).formatException(ei)
+    def formatException(self, ei):
         trace = utils.Trace(ei)
         def prettyformat(struct, indent):
             def _prettyformat(struct):
@@ -168,13 +147,13 @@ class TermFormatter(Formatter):
             return u'\n'.join([i+l for l in ''.join(_prettyformat(struct)).splitlines()])
         return '\n'.join(prettyformat(info, indent) for info, indent in trace.stack)
 
-    def format(self, record, isatty=False):
+    def format(self, record):
         record.message = record.getMessage()
         if self.usesTime():
             record.asctime = self.formatTime(record, self.datefmt)
         s = self._fmt % record.__dict__
         if record.exc_info:
-            exc_text = self.formatException(record.exc_info, isatty)
+            exc_text = self.formatException(record.exc_info)
             if s[-1:] != "\n":
                 s = s + "\n"
             try:
@@ -187,14 +166,57 @@ class TermFormatter(Formatter):
 class StreamHandler(StreamHandler):
 
     def __init__(self, *args, **kwargs):
+        formatter = kwargs.pop('formatter', Formatter())
+        self.term_formatter = kwargs.pop('term_formatter', TermFormatter())
         super(StreamHandler, self).__init__(*args, **kwargs)
-        self.formatter = self.formatter or TermFormatter()
+        self.formatter = formatter
 
     def format(self, record):
-        if self.formatter and isinstance(self.formatter, TermFormatter):
-            return self.formatter.format(record, os.isatty(self.stream.fileno()))
-        if self.formatter:
-            fmt = self.formatter
-        else:
-            fmt = _defaultFormatter
-        return fmt.format(record)
+        if self.term_formatter and os.isatty(self.stream.fileno()):
+            return self.term_formatter.format(record)
+        return super(StreamHandler, self).format(record)
+
+
+if __name__ == '__main__':
+    # usage: python -mgreat_justice.logging
+    logger = getLogger()
+    parser = argparse.ArgumentParser(prog='logging')
+    # you can chek email version of logging too
+    subparsers = parser.add_subparsers()
+    mail_parser = subparsers.add_parser('mail')
+    mail_parser.add_argument('--host', help='Mail server domain', required=True)
+    mail_parser.add_argument('--port', help='Mail server port', type=int, required=True)
+    mail_parser.add_argument('--fromaddr', help='Sender address', required=True)
+    mail_parser.add_argument('--toaddress', help='Recipient address', required=True)
+    mail_parser.add_argument('--subject', help='Mail subject', default='Log message')
+    mail_parser.add_argument('--username', required=False)
+    mail_parser.add_argument('--password', required=False)
+    mail_parser.add_argument('--unsecure', action='store_false')
+
+    console_handler = StreamHandler(sys.stdout, formatter=Formatter(),
+                                    term_formatter=TermFormatter())
+    logger.addHandler(console_handler)
+    def add_email_handler(args):
+        credentials = (args.username, args.password)
+        email_handler = SMTPHandler((args.host, args.port), args.fromaddr, [args.toaddress],
+                                    args.subject, credentials=credentials,
+                                    secure=None if args.unsecure else (),
+                                    formatter=Formatter(), html_formatter=HtmlFormatter())
+        logger.addHandler(email_handler)
+    mail_parser.set_defaults(func=add_email_handler)
+
+    if len(sys.argv) > 1:
+        args = parser.parse_args()
+        args.func(args)
+
+    # generate some trace
+    def function(x):
+        if x == 'step on':
+            raise ValueError('Don\'t tread on me!')
+
+    try:
+        y = 'step on'
+        function(y)
+    except Exception, e:
+        a = 99
+        logger.exception(e)
