@@ -4,6 +4,7 @@
 Basic structured for the printer
 '''
 
+import sys
 from termcolor import colored
 
 
@@ -18,7 +19,7 @@ class Structure(object):
         self.args = [value]
 
     def __unicode__(self):
-        return u''.join(unicode(arg) for arg in self.args)
+        return u''.join(_decode(arg) for arg in self.args)
 
     def prettyformat(self):
         '''
@@ -26,8 +27,15 @@ class Structure(object):
         '''
         return colored(
             u''.join(arg.prettyformat()
-            if isinstance(arg, Structure) else unicode(arg)
+            if isinstance(arg, Structure) else _decode(arg) if isinstance(arg, basestring) else unicode(arg)
             for arg in self.args), **self.attrs)
+
+
+def _decode(s):
+    try:
+        return unicode(s)
+    except UnicodeError:
+        return s.decode(sys.getfilesystemencoding(), 'replace')
 
 
 class WhatHappen(Structure):

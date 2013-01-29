@@ -67,6 +67,8 @@ class HtmlFormatter(Formatter):
                 for arg in struct.args:
                     if isinstance(arg, structure.Structure):
                         _prettyformat(arg)
+                    elif isinstance(arg, basestring):
+                        o.append(escape(structure._decode(arg)))
                     else:
                         o.append(escape(unicode(arg)))
                 if type(struct) in self.styles:
