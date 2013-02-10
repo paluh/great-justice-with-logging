@@ -16,11 +16,11 @@ CLASSIFIERS = [
 
 REQUIREMENTS = ['termcolor >= 1.0.0']
 
-setup(name='great-justice',
-      author='Patryk Zawadzki',
-      author_email='patrys@gmail.com',
+setup(name='great-justice-with-logging',
+      author='Patryk Zawadzki, Tomasz Rybarczyk',
+      author_email='patrys@gmail.com, paluho@gmail.com',
       description='Debug every ZIG',
-      version = '2012.6.8',
+      version = '2013.2.10',
       packages = find_packages(),
       classifiers=CLASSIFIERS,
       install_requires=REQUIREMENTS,

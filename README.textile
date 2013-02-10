@@ -1,6 +1,6 @@
 h1. How are you gentlemen _!!_
 
-This module provides an easy way to debug broken code.
+This module provides an easy way to debug broken code....  It is also a fork of original __great__ package and extends it by providing simple logging handlers and formatters.
 
 h2. What you say _!!_
 
