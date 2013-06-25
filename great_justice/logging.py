@@ -169,12 +169,15 @@ class StreamHandler(StreamHandler):
 
     def __init__(self, *args, **kwargs):
         formatter = kwargs.pop('formatter', Formatter())
-        self.term_formatter = kwargs.pop('term_formatter', TermFormatter())
+        self.term_formatter = kwargs.pop('term_formatter', None)
         super(StreamHandler, self).__init__(*args, **kwargs)
+        if self.term_formatter is None and (hasattr(self.stream, 'fileno') and
+                                            os.isatty(self.stream.fileno())):
+            self.term_formatter = TermFormatter()
         self.formatter = formatter
 
     def format(self, record):
-        if self.term_formatter and os.isatty(self.stream.fileno()):
+        if self.term_formatter:
             return self.term_formatter.format(record)
         return super(StreamHandler, self).format(record)
 
