@@ -7,13 +7,14 @@ A more useful alternative to regular stack traces.
 '''
 
 import contextlib
-import pprint
 import sys
 import time
 import traceback
 
 from . import structure
 from . import utils
+
+__version__ = '1.0'
 
 __all__ = ['what_happen', 'take_your_time', 'we_get_signal']
 

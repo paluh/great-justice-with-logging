@@ -1,6 +1,8 @@
 #! /usr/bin/env python
 from setuptools import setup, find_packages
 
+import great_justice
+
 CLASSIFIERS = [
     'Development Status :: 5 - Production/Stable',
     'Environment :: Console',
@@ -20,7 +22,7 @@ setup(name='great-justice-with-logging',
       author='Patryk Zawadzki, Tomasz Rybarczyk',
       author_email='patrys@gmail.com, paluho@gmail.com',
       description='Debug every ZIG',
-      version = '2013.2.10',
+      version = great_justice.__version__,
       packages = find_packages(),
       classifiers=CLASSIFIERS,
       install_requires=REQUIREMENTS,
