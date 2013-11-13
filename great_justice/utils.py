@@ -68,6 +68,8 @@ def is_own_frame(frame):
     Returns True if given frame points to us
     '''
     filename = inspect.getsourcefile(frame)
+    if filename is None:
+        return False
     # skip self
     filename_base = filename.rsplit('.', 1)[0]
     local_base = __file__.rsplit('.', 1)[0]
