@@ -14,7 +14,7 @@ import traceback
 from . import structure
 from . import utils
 
-__version__ = '1.0.2'
+__version__ = '1.0.3'
 
 __all__ = ['what_happen', 'take_your_time', 'we_get_signal']
 

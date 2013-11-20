@@ -16,11 +16,15 @@ from . import utils
 
 class Formatter(Formatter):
 
-    def formatException(self, ei):
-        s = unicode(utils.Trace(ei))
+    def _formatTrace(self, trace):
+        s = unicode(trace)
         if s[-1:] == "\n":
             s = s[:-1]
         return s
+
+    def formatException(self, ei):
+        trace = utils.Trace(ei)
+        return self._formatTrace(trace)
 
 
 class HtmlFormatter(Formatter):
@@ -40,25 +44,37 @@ class HtmlFormatter(Formatter):
         structure.ExceptionValue: 'font-weight:bold;color:red',
     }
 
+    def __init__(self, *args, **kwargs):
+        self._max_trace_item_length = kwargs.pop('max_trace_item_length', None)
+        super(Formatter, self).__init__(*args, **kwargs)
+
+
     def format(self, record):
         record.message = record.getMessage()
         if self.usesTime():
             record.asctime = self.formatTime(record, self.datefmt)
         s = self._fmt % record.__dict__
         if record.exc_info:
-            s = '<p style="%s">%s</p>' % (self.header_container_style, s)
             exc_html = self.formatException(record.exc_info)
+            s = '<p style="%s">%s</p>' % (self.header_container_style, s)
             s = s + exc_html
         return s
 
-    def formatException(self, ei):
-        trace = utils.Trace(ei)
+    def _cutTraceItemString(self, element_string):
+        if (self._max_trace_item_length is None or
+            len(element_string) < self._max_trace_item_length):
+            return element_string
+        element_string = ('%s' % element_string[:(self._max_trace_item_length - 3)])
+        return '%s&hellip;' % element_string
+
+    def _formatTrace(self, trace):
         escape = lambda s: (s.replace('&', '&amp;')
                              .replace('>', '&gt;')
                              .replace('<', '&lt;')
                              .replace("'", '&#39;')
                              .replace('"', '&#34;'))
         output = ['<div style="%s">' % self.trace_container_style]
+
         def prettyformat(struct, indent):
             o = []
             def _prettyformat(struct):
@@ -68,9 +84,9 @@ class HtmlFormatter(Formatter):
                     if isinstance(arg, structure.Structure):
                         _prettyformat(arg)
                     elif isinstance(arg, basestring):
-                        o.append(escape(structure._decode(arg)))
+                        o.append(self._cutTraceItemString(escape(structure._decode(arg))))
                     else:
-                        o.append(escape(unicode(arg)))
+                        o.append(self._cutTraceItemString(escape(unicode(arg))))
                 if type(struct) in self.styles:
                     o.append(u'</span>')
             _prettyformat(struct)
@@ -136,18 +152,31 @@ class TermFormatter(Formatter):
         structure.ExceptionValue: {'color': 'red', 'attrs': ['reverse']}
     }
 
-    def formatException(self, ei):
-        trace = utils.Trace(ei)
+    def __init__(self, *args, **kwargs):
+        self._max_trace_item_length = kwargs.pop('max_trace_item_length', None)
+        super(Formatter, self).__init__(*args, **kwargs)
+
+
+    def _formatTrace(self, trace):
+        """Format internal traceback representation"""
         def prettyformat(struct, indent):
             def _prettyformat(struct):
                 attrs = self.styles.get(type(struct), {})
                 return colored(
                     u''.join(_prettyformat(arg)
-                    if isinstance(arg, structure.Structure) else unicode(arg)
+                    if isinstance(arg, structure.Structure) else self._cutTraceItemString(unicode(arg))
                     for arg in struct.args), **attrs)
             i = u'  '*indent
             return u'\n'.join([i+l for l in ''.join(_prettyformat(struct)).splitlines()])
         return '\n'.join(prettyformat(info, indent) for info, indent in trace.stack)
+
+    def _cutTraceItemString(self, element_string):
+        if (self._max_trace_item_length is None or
+            len(element_string) < self._max_trace_item_length):
+            return element_string
+        element_string = ('%s' % element_string[:(self._max_trace_item_length - 3)])
+        return element_string.ljust(self._max_trace_item_length, '.')
+
 
     def format(self, record):
         record.message = record.getMessage()
